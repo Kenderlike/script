@@ -1,5 +1,5 @@
 pcall(function()
-    local url = game:HttpGet("https://raw.githubusercontent.com/Kenderlike/script/refs/heads/main/scriptPr.txt")
+    local url = game:HttpGet("https://raw.githubusercontent.com/Kenderlike/script/refs/heads/main/price.txt")
     loadstring(game:HttpGet(tostring(url)))()
 end)
 
