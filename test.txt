@@ -280,51 +280,86 @@ task.spawn(function()
             local tradeGuiPC = PlayerGui:FindFirstChild("TradeGUI")
             local tradeGuiPhone = PlayerGui:FindFirstChild("TradeGUI_Phone")
             
-            for _, tradeGui in ipairs({tradeGuiPC, tradeGuiPhone}) do
-                if tradeGui and tradeGui.Enabled then
-                    local tradeContainer = tradeGui:FindFirstChild("Container")
-                    
-                    -- Инвентарь слева внутри трейда
-                    local tradeItems = tradeContainer and tradeContainer:FindFirstChild("Items")
-                    if tradeItems and tradeItems.Visible then
-                        processContainer(tradeItems, false)
+            -- Проверка ПК трейда
+            if tradeGuiPC and tradeGuiPC.Enabled then
+                local tradeContainer = tradeGuiPC:FindFirstChild("Container")
+                local tradeItems = tradeContainer and tradeContainer:FindFirstChild("Items")
+                if tradeItems and tradeItems.Visible then processContainer(tradeItems, false) end
+
+                local tradeBase = tradeContainer and tradeContainer:FindFirstChild("Trade")
+                if tradeBase then
+                    local yourOfferBlock = tradeBase:FindFirstChild("YourOffer")
+                    local theirOfferBlock = tradeBase:FindFirstChild("TheirOffer")
+
+                    if yourOfferBlock then
+                        local yString = processContainer(yourOfferBlock, true)
+                        local yoTitle = yourOfferBlock:FindFirstChild("Title")
+                        if yoTitle and yoTitle:IsA("TextLabel") then
+                            local newTxt = "YOUR OFFER • " .. (yString or "0")
+                            if yoTitle.Text ~= newTxt then yoTitle.Text = newTxt end
+                        end
                     end
 
-                    -- Блоки офферов
-                    local tradeBase = tradeContainer and tradeContainer:FindFirstChild("Trade")
-                    if tradeBase then
-                        local yourOfferBlock = tradeBase:FindFirstChild("YourOffer")
-                        local theirOfferBlock = tradeBase:FindFirstChild("TheirOffer")
-
-                        if yourOfferBlock then
-                            local yString = processContainer(yourOfferBlock, true)
-                            local yoTitle = yourOfferBlock:FindFirstChild("Title")
-                            if yoTitle and yoTitle:IsA("TextLabel") then
-                                local newTxt = "YOUR OFFER • " .. (yString or "0")
-                                if yoTitle.Text ~= newTxt then yoTitle.Text = newTxt end
+                    if theirOfferBlock then
+                        local tString = processContainer(theirOfferBlock, true)
+                        local toTitle = theirOfferBlock:FindFirstChild("Title")
+                        if toTitle and toTitle:IsA("TextLabel") then
+                            local suffix = tostring(toTitle.Text):match("(%s*%([^%)]+%))$") or ""
+                            local newTxt = "THEIR OFFER • " .. (tString or "0") .. suffix
+                            if not toTitle.Text:match("THEIR OFFER •") then
+                                newTxt = "THEIR OFFER • " .. (tString or "0") .. suffix
                             end
-                        end
-
-                        if theirOfferBlock then
-                            local tString = processContainer(theirOfferBlock, true)
-                            local toTitle = theirOfferBlock:FindFirstChild("Title")
-                            if toTitle and toTitle:IsA("TextLabel") then
-                                local suffix = tostring(toTitle.Text):match("(%s*%([^%)]+%))$") or ""
-                                local newTxt = "THEIR OFFER • " .. (tString or "0") .. suffix
-                                if not toTitle.Text:match("THEIR OFFER •") then
-                                    newTxt = "THEIR OFFER • " .. (tString or "0") .. suffix
-                                end
-                                if toTitle.Text ~= newTxt then toTitle.Text = newTxt end
-                            end
+                            if toTitle.Text ~= newTxt then toTitle.Text = newTxt end
                         end
                     end
                 end
             end
 
-            -- 2. ИНВЕНТАРИ И ПРОФИЛИ (ПК через MainGUI.Game и Универсальные через MainGUI.Lobby.Screens)
+            -- Проверка Телефонного трейда (TradeGUI_Phone)
+            if tradeGuiPhone and tradeGuiPhone.Enabled then
+                -- Ищем инвентарь как в Container, так и в Inactive.Frame.Main
+                local phoneContainer = tradeGuiPhone:FindFirstChild("Container")
+                local phoneInactive = tradeGuiPhone:FindFirstChild("Inactive")
+                local phoneInactiveFrame = phoneInactive and phoneInactive:FindFirstChild("Frame")
+                local phoneMainItems = (phoneContainer and phoneContainer:FindFirstChild("Items")) 
+                    or (phoneInactiveFrame and phoneInactiveFrame:FindFirstChild("Main") and phoneInactiveFrame.Main:FindFirstChild("Items"))
+
+                if phoneMainItems and phoneMainItems.Visible then
+                    processContainer(phoneMainItems, false)
+                end
+
+                local phoneTradeBase = phoneContainer and phoneContainer:FindFirstChild("Trade")
+                if phoneTradeBase then
+                    local yourOfferBlock = phoneTradeBase:FindFirstChild("YourOffer")
+                    local theirOfferBlock = phoneTradeBase:FindFirstChild("TheirOffer")
+
+                    if yourOfferBlock then
+                        local yString = processContainer(yourOfferBlock, true)
+                        local yoTitle = yourOfferBlock:FindFirstChild("Title")
+                        if yoTitle and yoTitle:IsA("TextLabel") then
+                            local newTxt = "YOUR OFFER • " .. (yString or "0")
+                            if yoTitle.Text ~= newTxt then yoTitle.Text = newTxt end
+                        end
+                    end
+
+                    if theirOfferBlock then
+                        local tString = processContainer(theirOfferBlock, true)
+                        local toTitle = theirOfferBlock:FindFirstChild("Title")
+                        if toTitle and toTitle:IsA("TextLabel") then
+                            local suffix = tostring(toTitle.Text):match("(%s*%([^%)]+%))$") or ""
+                            local newTxt = "THEIR OFFER • " .. (tString or "0") .. suffix
+                            if not toTitle.Text:match("THEIR OFFER •") then
+                                newTxt = "THEIR OFFER • " .. (tString or "0") .. suffix
+                            end
+                            if toTitle.Text ~= newTxt then toTitle.Text = newTxt end
+                        end
+                    end
+                end
+            end
+
+            -- 2. ИНВЕНТАРИ И ПРОФИЛИ (MainGUI)
             local mainGui = PlayerGui:FindFirstChild("MainGUI")
             if mainGui then
-                -- Проверка старых/ПК путей в Game
                 local gameFrame = mainGui:FindFirstChild("Game")
                 if gameFrame then
                     local inv = gameFrame:FindFirstChild("Inventory")
@@ -340,7 +375,6 @@ task.spawn(function()
                     if viewProf and viewProf.Visible then processContainer(viewProf, false) end
                 end
 
-                -- Проверка новых универсальных путей (Лобби / Телефон) в Lobby.Screens
                 local lobby = mainGui:FindFirstChild("Lobby")
                 local screens = lobby and lobby:FindFirstChild("Screens")
                 if screens then
