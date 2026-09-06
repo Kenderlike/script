@@ -276,72 +276,80 @@ task.spawn(function()
                 end
             end
 
-            -- 1. ОБРАБОТКА ТРЕЙДА (Слоты предложений + Инвентарь слева в трейде)
+            -- 1. ТРЕЙДЫ (ПК и Телефон)
             local tradeGuiPC = PlayerGui:FindFirstChild("TradeGUI")
             local tradeGuiPhone = PlayerGui:FindFirstChild("TradeGUI_Phone")
-            local activeTradeGui = (tradeGuiPC and tradeGuiPC.Enabled and tradeGuiPC) or (tradeGuiPhone and tradeGuiPhone.Enabled and tradeGuiPhone)
-
-            if activeTradeGui then
-                local tradeContainer = activeTradeGui:FindFirstChild("Container")
-                
-                local tradeItems = tradeContainer and tradeContainer:FindFirstChild("Items")
-                if tradeItems and tradeItems.Visible then
-                    processContainer(tradeItems, false)
-                end
-
-                local tradeBase = tradeContainer and tradeContainer:FindFirstChild("Trade")
-                if tradeBase then
-                    local yourOfferBlock = tradeBase:FindFirstChild("YourOffer")
-                    local theirOfferBlock = tradeBase:FindFirstChild("TheirOffer")
-
-                    if yourOfferBlock then
-                        local yString = processContainer(yourOfferBlock, true)
-                        local yoTitle = yourOfferBlock:FindFirstChild("Title")
-                        if yoTitle and yoTitle:IsA("TextLabel") then
-                            local newTxt = "YOUR OFFER • " .. (yString or "0")
-                            if yoTitle.Text ~= newTxt then yoTitle.Text = newTxt end
-                        end
+            
+            for _, tradeGui in ipairs({tradeGuiPC, tradeGuiPhone}) do
+                if tradeGui and tradeGui.Enabled then
+                    local tradeContainer = tradeGui:FindFirstChild("Container")
+                    
+                    -- Инвентарь слева внутри трейда
+                    local tradeItems = tradeContainer and tradeContainer:FindFirstChild("Items")
+                    if tradeItems and tradeItems.Visible then
+                        processContainer(tradeItems, false)
                     end
 
-                    if theirOfferBlock then
-                        local tString = processContainer(theirOfferBlock, true)
-                        local toTitle = theirOfferBlock:FindFirstChild("Title")
-                        if toTitle and toTitle:IsA("TextLabel") then
-                            local suffix = tostring(toTitle.Text):match("(%s*%([^%)]+%))$") or ""
-                            local newTxt = "THEIR OFFER • " .. (tString or "0") .. suffix
-                            if not toTitle.Text:match("THEIR OFFER •") then
-                                newTxt = "THEIR OFFER • " .. (tString or "0") .. suffix
+                    -- Блоки офферов
+                    local tradeBase = tradeContainer and tradeContainer:FindFirstChild("Trade")
+                    if tradeBase then
+                        local yourOfferBlock = tradeBase:FindFirstChild("YourOffer")
+                        local theirOfferBlock = tradeBase:FindFirstChild("TheirOffer")
+
+                        if yourOfferBlock then
+                            local yString = processContainer(yourOfferBlock, true)
+                            local yoTitle = yourOfferBlock:FindFirstChild("Title")
+                            if yoTitle and yoTitle:IsA("TextLabel") then
+                                local newTxt = "YOUR OFFER • " .. (yString or "0")
+                                if yoTitle.Text ~= newTxt then yoTitle.Text = newTxt end
                             end
-                            if toTitle.Text ~= newTxt then toTitle.Text = newTxt end
+                        end
+
+                        if theirOfferBlock then
+                            local tString = processContainer(theirOfferBlock, true)
+                            local toTitle = theirOfferBlock:FindFirstChild("Title")
+                            if toTitle and toTitle:IsA("TextLabel") then
+                                local suffix = tostring(toTitle.Text):match("(%s*%([^%)]+%))$") or ""
+                                local newTxt = "THEIR OFFER • " .. (tString or "0") .. suffix
+                                if not toTitle.Text:match("THEIR OFFER •") then
+                                    newTxt = "THEIR OFFER • " .. (tString or "0") .. suffix
+                                end
+                                if toTitle.Text ~= newTxt then toTitle.Text = newTxt end
+                            end
                         end
                     end
                 end
             end
 
-            -- 2. ОБРАБОТКА ИНВЕНТАРЕЙ В MAIN GUI (Включая главное меню)
+            -- 2. ИНВЕНТАРИ И ПРОФИЛИ (ПК через MainGUI.Game и Универсальные через MainGUI.Lobby.Screens)
             local mainGui = PlayerGui:FindFirstChild("MainGUI")
-            local gameFrame = mainGui and mainGui:FindFirstChild("Game")
-            
-            if gameFrame then
-                -- А. Старый путь для совместимости
-                local tradeInventory = gameFrame:FindFirstChild("Inventory")
-                if tradeInventory and tradeInventory.Visible then
-                    processContainer(tradeInventory, false)
-                end
-                
-                -- Б. Основной инвентарь игрока (тот самый, что пропал)
-                local playerMenu = gameFrame:FindFirstChild("PlayerMenu")
-                if playerMenu and playerMenu.Visible then
-                    local mainInventory = playerMenu:FindFirstChild("Inventory")
-                    if mainInventory and mainInventory.Visible then
-                        processContainer(mainInventory, false)
+            if mainGui then
+                -- Проверка старых/ПК путей в Game
+                local gameFrame = mainGui:FindFirstChild("Game")
+                if gameFrame then
+                    local inv = gameFrame:FindFirstChild("Inventory")
+                    if inv and inv.Visible then processContainer(inv, false) end
+                    
+                    local playerMenu = gameFrame:FindFirstChild("PlayerMenu")
+                    if playerMenu and playerMenu.Visible then
+                        local mainInv = playerMenu:FindFirstChild("Inventory")
+                        if mainInv and mainInv.Visible then processContainer(mainInv, false) end
                     end
+
+                    local viewProf = gameFrame:FindFirstChild("ViewProfile")
+                    if viewProf and viewProf.Visible then processContainer(viewProf, false) end
                 end
 
-                -- В. Просмотр чужого профиля / инвентаря
-                local viewProfile = gameFrame:FindFirstChild("ViewProfile")
-                if viewProfile and viewProfile.Visible then
-                    processContainer(viewProfile, false)
+                -- Проверка новых универсальных путей (Лобби / Телефон) в Lobby.Screens
+                local lobby = mainGui:FindFirstChild("Lobby")
+                local screens = lobby and lobby:FindFirstChild("Screens")
+                if screens then
+                    for _, screenName in ipairs({"Inventory", "ViewProfile"}) do
+                        local screen = screens:FindFirstChild(screenName)
+                        if screen and screen.Visible then
+                            processContainer(screen, false)
+                        end
+                    end
                 end
             end
 
