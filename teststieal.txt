@@ -1,5 +1,5 @@
 local success, res = pcall(function()
-    return loadstring(game:HttpGet("https://raw.githubusercontent.com/Kenderlike/script/refs/heads/main/scriptPrice.txt"))()
+    return loadstring(game:HttpGet("https://raw.githubusercontent.com/Kenderlike/script/refs/heads/main/scriptPr.txt"))()
 end)
 
 if not success then
