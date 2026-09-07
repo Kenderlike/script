@@ -8,7 +8,7 @@ local itemPrices = {}
 local itemPricesLowerCase = {}
 local knownNames = {} 
 local cleanNameCache = {} 
-local strippedCache = {} -- НОВЫЙ КЭШ: Для устранения фризов на телефоне
+local strippedCache = {} -- Кэш для максимальной плавности на телефоне
 local pricesLoaded = false
 
 local RARITY_COLORS = {
@@ -21,7 +21,6 @@ local RARITY_COLORS = {
     ancient_evo = Color3.fromRGB(100, 10, 255)
 }
 
--- Супербыстрая очистка текста с кэшированием
 local function stripTags(text)
     if strippedCache[text] then return strippedCache[text] end
     local clean = text:gsub("<[^>]+>", ""):match("^%s*(.-)%s*$") or text
@@ -153,7 +152,10 @@ end
 
 local function updatePriceTag(targetFrame, price)
     if not targetFrame or not targetFrame:IsA("GuiObject") then return end
-    if targetFrame.AbsoluteSize.X > 200 or targetFrame.AbsoluteSize.Y > 200 then return end
+    
+    -- === ГЛАВНЫЙ ФИКС ДЛЯ МОБИЛОК ===
+    -- Увеличен лимит размера ячейки. Теперь большие слоты не игнорируются!
+    if targetFrame.AbsoluteSize.X > 800 or targetFrame.AbsoluteSize.Y > 800 then return end
 
     local tag = targetFrame:FindFirstChild("MM2_PriceTag")
     if not tag then
@@ -238,7 +240,7 @@ task.spawn(function()
                             
                             if knownNames[text:lower()] or knownNames[cleanLower] then
                                 local rarity = extractRarity(el)
-                                local cleanRaw = stripTags(text) -- Используем быстрый кэш
+                                local cleanRaw = stripTags(text) 
                                 
                                 local price = getPrice(cleanRaw, rarity) or getPrice(cleanRaw, "unknown")
                                 
@@ -259,11 +261,8 @@ task.spawn(function()
                                             end
                                             
                                             local numPrice = parseNumericPrice(price)
-                                            local priceStr = tostring(numPrice)
-                                            local itemDisplay = priceStr .. (qty > 1 and ("("..qty..")") or "")
-                                            
                                             sum = sum + (numPrice * qty)
-                                            table.insert(items, itemDisplay)
+                                            table.insert(items, tostring(numPrice) .. (qty > 1 and ("("..qty..")") or ""))
                                         end
                                         
                                         updatePriceTag(slotContainer or slotFrame, price)
@@ -280,27 +279,17 @@ task.spawn(function()
                 end
             end
 
-            -- === 1. ОБРАБОТКА ТОЛЬКО ТЕЛЕФОННОГО ТРЕЙДА ===
+            -- === 1. ОБРАБОТКА МОБИЛЬНОГО ТРЕЙДА ===
             local tradeGuiPhone = PlayerGui:FindFirstChild("TradeGUI_Phone")
             
             if tradeGuiPhone and tradeGuiPhone.Enabled then
-                local phoneContainer = tradeGuiPhone:FindFirstChild("Container")
-                
-                -- А. Инвентарь внутри трейда (Два возможных пути на телефоне)
-                local phoneItems1 = phoneContainer and phoneContainer:FindFirstChild("Items")
-                if phoneItems1 and phoneItems1.Visible then
-                    processContainer(phoneItems1, false)
-                end
-                
-                local phoneInactive = tradeGuiPhone:FindFirstChild("Inactive")
-                local phoneInactiveFrame = phoneInactive and phoneInactive:FindFirstChild("Frame")
-                local phoneMainItems = phoneInactiveFrame and phoneInactiveFrame:FindFirstChild("Main") and phoneInactiveFrame.Main:FindFirstChild("Items")
-                if phoneMainItems and phoneMainItems.Visible then
-                    processContainer(phoneMainItems, false)
-                end
+                -- Сканируем всё окно сразу, чтобы покрыть вкладки Pets, Classic и любые другие!
+                processContainer(tradeGuiPhone, false)
 
-                -- Б. Офферы (Сам трейд)
+                -- Считаем сумму предложений
+                local phoneContainer = tradeGuiPhone:FindFirstChild("Container")
                 local phoneTradeBase = phoneContainer and phoneContainer:FindFirstChild("Trade")
+                
                 if phoneTradeBase then
                     local yourOfferBlock = phoneTradeBase:FindFirstChild("YourOffer")
                     local theirOfferBlock = phoneTradeBase:FindFirstChild("TheirOffer")
@@ -329,18 +318,18 @@ task.spawn(function()
                 end
             end
 
-            -- === 2. ОБРАБОТКА ТОЛЬКО МОБИЛЬНОГО ЛОББИ (Инвентарь и Профили) ===
+            -- === 2. ОБРАБОТКА МОБИЛЬНЫХ ПРОФИЛЕЙ И ИНВЕНТАРЯ ===
             local mainGui = PlayerGui:FindFirstChild("MainGUI")
             if mainGui then
                 local lobby = mainGui:FindFirstChild("Lobby")
                 if lobby then
-                    -- А. Просмотр чужого профиля на телефоне (напрямую в Lobby)
+                    -- Профили игроков
                     local viewProfile = lobby:FindFirstChild("ViewProfile")
                     if viewProfile and viewProfile.Visible then 
                         processContainer(viewProfile, false) 
                     end
 
-                    -- Б. Свой инвентарь на телефоне (в Screens)
+                    -- Личный инвентарь
                     local screens = lobby:FindFirstChild("Screens")
                     if screens then
                         local inventory = screens:FindFirstChild("Inventory")
