@@ -1,5 +1,3 @@
--- на телефоне не видно в трейде и профили других
-
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
@@ -10,6 +8,7 @@ local itemPrices = {}
 local itemPricesLowerCase = {}
 local knownNames = {} 
 local cleanNameCache = {} 
+local strippedCache = {} -- НОВЫЙ КЭШ: Для устранения фризов на телефоне
 local pricesLoaded = false
 
 local RARITY_COLORS = {
@@ -21,6 +20,14 @@ local RARITY_COLORS = {
     vintage = Color3.fromRGB(230, 200, 0),
     ancient_evo = Color3.fromRGB(100, 10, 255)
 }
+
+-- Супербыстрая очистка текста с кэшированием
+local function stripTags(text)
+    if strippedCache[text] then return strippedCache[text] end
+    local clean = text:gsub("<[^>]+>", ""):match("^%s*(.-)%s*$") or text
+    strippedCache[text] = clean
+    return clean
+end
 
 local function cleanName(name)
     local s = tostring(name):gsub("%s*%b()%s*$", "")
@@ -146,20 +153,15 @@ end
 
 local function updatePriceTag(targetFrame, price)
     if not targetFrame or not targetFrame:IsA("GuiObject") then return end
-
-    if targetFrame.AbsoluteSize.X > 200 or targetFrame.AbsoluteSize.Y > 200 then
-        return
-    end
+    if targetFrame.AbsoluteSize.X > 200 or targetFrame.AbsoluteSize.Y > 200 then return end
 
     local tag = targetFrame:FindFirstChild("MM2_PriceTag")
     if not tag then
         tag = Instance.new("TextLabel")
         tag.Name = "MM2_PriceTag"
         tag.Size = UDim2.new(1, 0, 0, 16)
-        
         tag.Position = UDim2.new(0.5, 0, 0, 0)
         tag.AnchorPoint = Vector2.new(0.5, 0)
-        
         tag.TextXAlignment = Enum.TextXAlignment.Center
         tag.TextYAlignment = Enum.TextYAlignment.Top
         tag.BackgroundTransparency = 1 
@@ -236,7 +238,7 @@ task.spawn(function()
                             
                             if knownNames[text:lower()] or knownNames[cleanLower] then
                                 local rarity = extractRarity(el)
-                                local cleanRaw = text:gsub("<[^>]+>", ""):match("^%s*(.-)%s*$") or text
+                                local cleanRaw = stripTags(text) -- Используем быстрый кэш
                                 
                                 local price = getPrice(cleanRaw, rarity) or getPrice(cleanRaw, "unknown")
                                 
@@ -278,24 +280,30 @@ task.spawn(function()
                 end
             end
 
-            -- 1. ОБРАБОТКА ТРЕЙДА (Слоты предложений + Инвентарь слева в трейде)
-            local tradeGuiPC = PlayerGui:FindFirstChild("TradeGUI")
+            -- === 1. ОБРАБОТКА ТОЛЬКО ТЕЛЕФОННОГО ТРЕЙДА ===
             local tradeGuiPhone = PlayerGui:FindFirstChild("TradeGUI_Phone")
-            local activeTradeGui = (tradeGuiPC and tradeGuiPC.Enabled and tradeGuiPC) or (tradeGuiPhone and tradeGuiPhone.Enabled and tradeGuiPhone)
-
-            if activeTradeGui then
-                local tradeContainer = activeTradeGui:FindFirstChild("Container")
+            
+            if tradeGuiPhone and tradeGuiPhone.Enabled then
+                local phoneContainer = tradeGuiPhone:FindFirstChild("Container")
                 
-                -- Обработка инвентаря слева внутри самого TradeGUI
-                local tradeItems = tradeContainer and tradeContainer:FindFirstChild("Items")
-                if tradeItems and tradeItems.Visible then
-                    processContainer(tradeItems, false)
+                -- А. Инвентарь внутри трейда (Два возможных пути на телефоне)
+                local phoneItems1 = phoneContainer and phoneContainer:FindFirstChild("Items")
+                if phoneItems1 and phoneItems1.Visible then
+                    processContainer(phoneItems1, false)
+                end
+                
+                local phoneInactive = tradeGuiPhone:FindFirstChild("Inactive")
+                local phoneInactiveFrame = phoneInactive and phoneInactive:FindFirstChild("Frame")
+                local phoneMainItems = phoneInactiveFrame and phoneInactiveFrame:FindFirstChild("Main") and phoneInactiveFrame.Main:FindFirstChild("Items")
+                if phoneMainItems and phoneMainItems.Visible then
+                    processContainer(phoneMainItems, false)
                 end
 
-                local tradeBase = tradeContainer and tradeContainer:FindFirstChild("Trade")
-                if tradeBase then
-                    local yourOfferBlock = tradeBase:FindFirstChild("YourOffer")
-                    local theirOfferBlock = tradeBase:FindFirstChild("TheirOffer")
+                -- Б. Офферы (Сам трейд)
+                local phoneTradeBase = phoneContainer and phoneContainer:FindFirstChild("Trade")
+                if phoneTradeBase then
+                    local yourOfferBlock = phoneTradeBase:FindFirstChild("YourOffer")
+                    local theirOfferBlock = phoneTradeBase:FindFirstChild("TheirOffer")
 
                     if yourOfferBlock then
                         local yString = processContainer(yourOfferBlock, true)
@@ -321,31 +329,32 @@ task.spawn(function()
                 end
             end
 
-            -- 2. ОБРАБОТКА ИНВЕНТАРЕЙ В MAIN GUI
+            -- === 2. ОБРАБОТКА ТОЛЬКО МОБИЛЬНОГО ЛОББИ (Инвентарь и Профили) ===
             local mainGui = PlayerGui:FindFirstChild("MainGUI")
-            local gameFrame = mainGui and mainGui:FindFirstChild("Game")
-            
-            if gameFrame then
-                -- Основной инвентарь игрока
-                local playerMenu = gameFrame:FindFirstChild("PlayerMenu")
-                if playerMenu and playerMenu.Visible then
-                    local mainInventory = playerMenu:FindFirstChild("Inventory")
-                    if mainInventory and mainInventory.Visible then
-                        processContainer(mainInventory, false)
+            if mainGui then
+                local lobby = mainGui:FindFirstChild("Lobby")
+                if lobby then
+                    -- А. Просмотр чужого профиля на телефоне (напрямую в Lobby)
+                    local viewProfile = lobby:FindFirstChild("ViewProfile")
+                    if viewProfile and viewProfile.Visible then 
+                        processContainer(viewProfile, false) 
                     end
-                end
 
-                -- Просмотр чужого профиля / инвентаря
-                local viewProfile = gameFrame:FindFirstChild("ViewProfile")
-                if viewProfile and viewProfile.Visible then
-                    processContainer(viewProfile, false)
+                    -- Б. Свой инвентарь на телефоне (в Screens)
+                    local screens = lobby:FindFirstChild("Screens")
+                    if screens then
+                        local inventory = screens:FindFirstChild("Inventory")
+                        if inventory and inventory.Visible then
+                            processContainer(inventory, false)
+                        end
+                    end
                 end
             end
 
         end)
         
         if not success then
-            warn("[MM2 Prices] Ошибка парсинга: " .. tostring(err))
+            warn("[MM2 Prices Mobile] Ошибка: " .. tostring(err))
         end
     end
 end)
