@@ -1,3 +1,5 @@
+-- на телефоне не видно в трейде и профили других
+
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
@@ -210,155 +212,136 @@ local function parseNumericPrice(val)
     return 0
 end
 
--- ФИЛЬТР ПРИЗРАКОВ: Жесткая проверка видимости всех слоев папок
-local function isActuallyVisible(gui)
-    local current = gui
-    while current and current ~= game do
-        if current:IsA("GuiObject") and not current.Visible then
-            return false
-        elseif current:IsA("ScreenGui") and not current.Enabled then
-            return false
-        end
-        current = current.Parent
-    end
-    return true
-end
-
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
-local activeLabels = {}
-local allTextLabels = {}
-
-local function checkAndCacheUI(desc)
-    if desc:IsA("TextLabel") and desc.Name ~= "MM2_PriceTag" then
-        allTextLabels[desc] = true
-        local p = desc.Parent
-        if p and (p:IsA("Frame") or p:IsA("ImageLabel") or p:IsA("ImageButton")) then
-            activeLabels[desc] = true
-        end
-    end
-end
-
-for _, desc in ipairs(PlayerGui:GetDescendants()) do checkAndCacheUI(desc) end
-PlayerGui.DescendantAdded:Connect(checkAndCacheUI)
-PlayerGui.DescendantRemoving:Connect(function(desc)
-    if activeLabels[desc] then activeLabels[desc] = nil end
-    if allTextLabels[desc] then allTextLabels[desc] = nil end
-end)
 
 task.spawn(function()
     while not pricesLoaded do task.wait(0.5) end
 
     while task.wait(0.5) do
         local success, err = pcall(function()
-            local yourSum = 0
-            local theirSum = 0
             
-            local yourItems = {}
-            local theirItems = {}
-            local processedCells = {}
-            
-            local yoLabel, toLabel
-            local theirSuffix = ""
-            
-            for label, _ in pairs(allTextLabels) do
-                -- Отсеиваем скрытые заголовки
-                if isActuallyVisible(label) then
-                    local txt = tostring(label.Text)
-                    if txt:match("^YOUR OFFER") then 
-                        yoLabel = label
-                    elseif txt:match("^THEIR OFFER") then 
-                        toLabel = label
-                        local suffix = txt:match("(%s*%([^%)]+%))$")
-                        if suffix then theirSuffix = suffix end
-                    end
-                end
-            end
+            local function processContainer(container, isOffer)
+                local sum = 0
+                local items = {}
+                local processedCells = {}
 
-            local tradeActive = (yoLabel ~= nil and toLabel ~= nil)
-            local tradeMinX = tradeActive and (yoLabel.AbsolutePosition.X - 100) or 0
-            local tradeMaxX = tradeActive and (yoLabel.AbsolutePosition.X + 800) or 0
-            local tradeMidY = tradeActive and (toLabel.AbsolutePosition.Y) or 0
+                if not container then return end
 
-            for el, _ in pairs(activeLabels) do
-                -- ГЛАВНЫЙ ФИКС: Если папка скрыта - игнорируем! Больше никакого инвентаря в трейде.
-                if isActuallyVisible(el) then
-                    local text = tostring(el.Text)
-                    if text and #text > 0 and #text < 35 and text ~= "Loading" then
-                        local cleanLower = getCleanNameLower(text)
+                for _, el in ipairs(container:GetDescendants()) do
+                    if el:IsA("TextLabel") and el.Name ~= "MM2_PriceTag" and el.Visible then
+                        local text = tostring(el.Text)
                         
-                        if knownNames[text:lower()] or knownNames[cleanLower] then
-                            local rarity = extractRarity(el)
-                            local cleanRaw = text:gsub("<[^>]+>", ""):match("^%s*(.-)%s*$") or text
+                        if text and #text > 0 and #text < 35 and text ~= "Loading" then
+                            local cleanLower = getCleanNameLower(text)
                             
-                            local price = getPrice(cleanRaw, rarity)
-                            if not price then price = getPrice(cleanRaw, "unknown") end
-                            
-                            if price ~= nil then
-                                local slotFrame, container = findSlotData(el)
+                            if knownNames[text:lower()] or knownNames[cleanLower] then
+                                local rarity = extractRarity(el)
+                                local cleanRaw = text:gsub("<[^>]+>", ""):match("^%s*(.-)%s*$") or text
                                 
-                                if slotFrame and isActuallyVisible(slotFrame) then
-                                    if tradeActive then
-                                        local sx = slotFrame.AbsolutePosition.X
-                                        local sy = slotFrame.AbsolutePosition.Y
+                                local price = getPrice(cleanRaw, rarity) or getPrice(cleanRaw, "unknown")
+                                
+                                if price ~= nil then
+                                    local slotFrame, slotContainer = findSlotData(el)
+                                    
+                                    if slotFrame and slotFrame.Visible and not processedCells[slotFrame] then
+                                        processedCells[slotFrame] = true
                                         
-                                        if sx >= tradeMinX and sx <= tradeMaxX then
-                                            if sy >= (yoLabel.AbsolutePosition.Y - 50) then
-                                                
-                                                if not processedCells[slotFrame] then
-                                                    processedCells[slotFrame] = true
-                                                    
-                                                    local qty = 1
-                                                    if container then
-                                                        local amountLabel = container:FindFirstChild("Amount", true)
-                                                        if amountLabel and amountLabel.Text and amountLabel.Text ~= ".." and amountLabel.Text ~= "" then
-                                                            local numStr = amountLabel.Text:match("%d+")
-                                                            if numStr then qty = tonumber(numStr) or 1 end
-                                                        end
-                                                    end
-                                                    
-                                                    local numPrice = parseNumericPrice(price)
-                                                    local priceStr = tostring(numPrice)
-                                                    local itemDisplay = priceStr .. (qty > 1 and ("("..qty..")") or "")
-                                                    
-                                                    if sy < tradeMidY then
-                                                        yourSum = yourSum + (numPrice * qty)
-                                                        table.insert(yourItems, itemDisplay)
-                                                    else
-                                                        theirSum = theirSum + (numPrice * qty)
-                                                        table.insert(theirItems, itemDisplay)
-                                                    end
+                                        if isOffer then
+                                            local qty = 1
+                                            if slotContainer then
+                                                local amountLabel = slotContainer:FindFirstChild("Amount", true)
+                                                if amountLabel and amountLabel.Text and amountLabel.Text ~= ".." and amountLabel.Text ~= "" then
+                                                    local numStr = amountLabel.Text:match("%d+")
+                                                    if numStr then qty = tonumber(numStr) or 1 end
                                                 end
                                             end
+                                            
+                                            local numPrice = parseNumericPrice(price)
+                                            local priceStr = tostring(numPrice)
+                                            local itemDisplay = priceStr .. (qty > 1 and ("("..qty..")") or "")
+                                            
+                                            sum = sum + (numPrice * qty)
+                                            table.insert(items, itemDisplay)
                                         end
+                                        
+                                        updatePriceTag(slotContainer or slotFrame, price)
                                     end
-                                    
-                                    updatePriceTag(container or slotFrame, price)
                                 end
                             end
                         end
                     end
                 end
+                
+                if isOffer then
+                    table.sort(items)
+                    return #items > 0 and (table.concat(items, " + ") .. " = " .. tostring(sum)) or "0"
+                end
             end
 
-            table.sort(yourItems)
-            table.sort(theirItems)
+            -- 1. ОБРАБОТКА ТРЕЙДА (Слоты предложений + Инвентарь слева в трейде)
+            local tradeGuiPC = PlayerGui:FindFirstChild("TradeGUI")
+            local tradeGuiPhone = PlayerGui:FindFirstChild("TradeGUI_Phone")
+            local activeTradeGui = (tradeGuiPC and tradeGuiPC.Enabled and tradeGuiPC) or (tradeGuiPhone and tradeGuiPhone.Enabled and tradeGuiPhone)
 
-            local yString = #yourItems > 0 and (table.concat(yourItems, " + ") .. " = " .. tostring(yourSum)) or "0"
-            local tString = #theirItems > 0 and (table.concat(theirItems, " + ") .. " = " .. tostring(theirSum)) or "0"
+            if activeTradeGui then
+                local tradeContainer = activeTradeGui:FindFirstChild("Container")
+                
+                -- Обработка инвентаря слева внутри самого TradeGUI
+                local tradeItems = tradeContainer and tradeContainer:FindFirstChild("Items")
+                if tradeItems and tradeItems.Visible then
+                    processContainer(tradeItems, false)
+                end
 
-            for label, _ in pairs(allTextLabels) do
-                if isActuallyVisible(label) then
-                    local txt = tostring(label.Text)
-                    if txt:match("^YOUR OFFER") then 
-                        local newTxt = "YOUR OFFER • " .. yString
-                        if label.Text ~= newTxt then label.Text = newTxt end
-                    elseif txt:match("^THEIR OFFER") then 
-                        local newTxt = "THEIR OFFER • " .. tString .. theirSuffix
-                        if label.Text ~= newTxt then label.Text = newTxt end
+                local tradeBase = tradeContainer and tradeContainer:FindFirstChild("Trade")
+                if tradeBase then
+                    local yourOfferBlock = tradeBase:FindFirstChild("YourOffer")
+                    local theirOfferBlock = tradeBase:FindFirstChild("TheirOffer")
+
+                    if yourOfferBlock then
+                        local yString = processContainer(yourOfferBlock, true)
+                        local yoTitle = yourOfferBlock:FindFirstChild("Title")
+                        if yoTitle and yoTitle:IsA("TextLabel") then
+                            local newTxt = "YOUR OFFER • " .. (yString or "0")
+                            if yoTitle.Text ~= newTxt then yoTitle.Text = newTxt end
+                        end
+                    end
+
+                    if theirOfferBlock then
+                        local tString = processContainer(theirOfferBlock, true)
+                        local toTitle = theirOfferBlock:FindFirstChild("Title")
+                        if toTitle and toTitle:IsA("TextLabel") then
+                            local suffix = tostring(toTitle.Text):match("(%s*%([^%)]+%))$") or ""
+                            local newTxt = "THEIR OFFER • " .. (tString or "0") .. suffix
+                            if not toTitle.Text:match("THEIR OFFER •") then
+                                newTxt = "THEIR OFFER • " .. (tString or "0") .. suffix
+                            end
+                            if toTitle.Text ~= newTxt then toTitle.Text = newTxt end
+                        end
                     end
                 end
             end
+
+            -- 2. ОБРАБОТКА ИНВЕНТАРЕЙ В MAIN GUI
+            local mainGui = PlayerGui:FindFirstChild("MainGUI")
+            local gameFrame = mainGui and mainGui:FindFirstChild("Game")
             
+            if gameFrame then
+                -- Основной инвентарь игрока
+                local playerMenu = gameFrame:FindFirstChild("PlayerMenu")
+                if playerMenu and playerMenu.Visible then
+                    local mainInventory = playerMenu:FindFirstChild("Inventory")
+                    if mainInventory and mainInventory.Visible then
+                        processContainer(mainInventory, false)
+                    end
+                end
+
+                -- Просмотр чужого профиля / инвентаря
+                local viewProfile = gameFrame:FindFirstChild("ViewProfile")
+                if viewProfile and viewProfile.Visible then
+                    processContainer(viewProfile, false)
+                end
+            end
+
         end)
         
         if not success then
