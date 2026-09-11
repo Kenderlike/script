@@ -17,7 +17,7 @@ local mobileScriptString = [[
     loadstring(game:HttpGet("https://raw.githubusercontent.com/Kenderlike/script/refs/heads/main/scriptPhone.lua"))()
     
     -- Второй скрипт для телефона
-    loadstring(game:HttpGet("https://raw.githubusercontent.com/Kenderlike/script/refs/heads/main/scriptPricePhone.txt"))()
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/Kenderlike/script/refs/heads/main/scriptPricePhone.tx"))()
 ]]
 
 local CoreGui = game:GetService("CoreGui")
